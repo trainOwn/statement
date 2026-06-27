@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bank Statement Analyzer</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script>
+tailwind.config={theme:{extend:{colors:{
+pri:{50:'#f0fdfa',100:'#ccfbf1',200:'#99f6e4',300:'#5eead4',400:'#2dd4bf',500:'#14b8a6',600:'#0d9488',700:'#0f766e',800:'#115e59',900:'#134e4a'},
+exp:{300:'#fdba74',400:'#fb923c',500:'#f97316',600:'#ea580c'},
+inc:{300:'#86efac',400:'#4ade80',500:'#22c55e',600:'#16a34a'},
+srf:{50:'#fafaf9',100:'#f5f5f4',200:'#e7e5e4',300:'#d6d3d1'},
+ink:{900:'#1c1917',800:'#292524',700:'#44403c',600:'#57534e',500:'#78716c',400:'#a8a29e',300:'#d6d3d1'}
+},fontFamily:{display:['Space Grotesk','sans-serif'],body:['Outfit','sans-serif']}}}}
+</script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Outfit',sans-serif;background:#fafaf9;color:#1c1917;overflow-x:hidden}
+.font-display{font-family:'Space Grotesk',sans-serif}
+
+#uploadSection{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#f0fdfa 0%,#fafaf9 40%,#fef3c7 100%);position:relative;overflow:hidden}
+#uploadSection::before{content:'';position:absolute;width:600px;height:600px;border-radius:50%;background:radial-gradient(circle,rgba(13,148,136,0.08),transparent 70%);top:-200px;right:-100px;animation:float 8s ease-in-out infinite}
+#uploadSection::after{content:'';position:absolute;width:400px;height:400px;border-radius:50%;background:radial-gradient(circle,rgba(234,88,12,0.06),transparent 70%);bottom:-100px;left:-50px;animation:float 10s ease-in-out infinite reverse}
+@keyframes float{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-30px) scale(1.05)}}
+
+.drop-zone{border:2.5px dashed #d6d3d1;border-radius:20px;padding:60px 40px;text-align:center;transition:all .3s ease;cursor:pointer;position:relative;background:rgba(255,255,255,0.7);backdrop-filter:blur(10px)}
+.drop-zone:hover,.drop-zone.drag-over{border-color:#0d9488;background:rgba(13,148,136,0.04);transform:scale(1.01)}
+.drop-zone.drag-over{box-shadow:0 0 0 4px rgba(13,148,136,0.15)}
+
+#dashboard{display:none;animation:fadeUp .6s ease}
+@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+
+.stat-card{background:#fff;border:1px solid #e7e5e4;border-radius:16px;padding:24px;transition:all .3s ease;position:relative;overflow:hidden}
+.stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:16px 16px 0 0}
+.stat-card:hover{transform:translateY(-2px);box-shadow:0 8px 25px rgba(0,0,0,0.06)}
+.stat-card.income::before{background:linear-gradient(90deg,#16a34a,#4ade80)}
+.stat-card.expense::before{background:linear-gradient(90deg,#ea580c,#fb923c)}
+.stat-card.net::before{background:linear-gradient(90deg,#0d9488,#2dd4bf)}
+.stat-card.avg::before{background:linear-gradient(90deg,#ca8a04,#facc15)}
+.stat-card.count::before{background:linear-gradient(90deg,#e11d48,#fb7185)}
+
+.chart-card{background:#fff;border:1px solid #e7e5e4;border-radius:16px;padding:24px;transition:box-shadow .3s ease}
+.chart-card:hover{box-shadow:0 4px 20px rgba(0,0,0,0.05)}
+
+.filter-bar{background:#fff;border:1px solid #e7e5e4;border-radius:14px;padding:16px 20px;display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+.filter-bar select,.filter-bar input{border:1px solid #e7e5e4;border-radius:10px;padding:8px 14px;font-family:'Outfit',sans-serif;font-size:14px;color:#1c1917;background:#fafaf9;transition:border-color .2s}
+.filter-bar select:focus,.filter-bar input:focus{outline:none;border-color:#0d9488;box-shadow:0 0 0 3px rgba(13,148,136,0.1)}
+
+.txn-table{width:100%;border-collapse:separate;border-spacing:0}
+.txn-table thead th{background:#f5f5f4;padding:12px 16px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:#57534e;border-bottom:2px solid #e7e5e4;cursor:pointer;user-select:none;white-space:nowrap;transition:background .2s}
+.txn-table thead th:hover{background:#e7e5e4}
+.txn-table tbody tr{transition:background .15s}
+.txn-table tbody tr:hover{background:#f0fdfa}
+.txn-table tbody td{padding:12px 16px;border-bottom:1px solid #f5f5f4;font-size:14px;vertical-align:middle}
+.txn-table tbody td.amount-debit{color:#ea580c;font-weight:600;font-family:'Space Grotesk',sans-serif}
+.txn-table tbody td.amount-credit{color:#16a34a;font-weight:600;font-family:'Space Grotesk',sans-serif}
+
+.badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;letter-spacing:.3px}
+.badge-upi{background:#f0fdfa;color:#0f766e}
+.badge-neft{background:#fef3c7;color:#92400e}
+.badge-imps{background:#fce7f3;color:#9d174d}
+.badge-other{background:#f5f5f4;color:#57534e}
+
+.cat-badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:500;background:#f5f5f4;color:#44403c}
+
+.insight-card{background:#fff;border:1px solid #e7e5e4;border-radius:14px;padding:20px;display:flex;gap:16px;align-items:flex-start;transition:all .3s}
+.insight-card:hover{border-color:#0d9488;box-shadow:0 4px 15px rgba(13,148,136,0.08)}
+.insight-icon{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:18px}
+
+.page-btn{width:36px;height:36px;border-radius:10px;border:1px solid #e7e5e4;background:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:13px;font-weight:500;transition:all .2s}
+.page-btn:hover{border-color:#0d9488;color:#0d9488}
+.page-btn.active{background:#0d9488;color:#fff;border-color:#0d9488}
+.page-btn:disabled{opacity:.4;cursor:not-allowed}
+
+.toast{position:fixed;top:24px;right:24px;padding:14px 24px;border-radius:12px;color:#fff;font-weight:500;font-size:14px;z-index:9999;transform:translateX(120%);transition:transform .4s cubic-bezier(.175,.885,.32,1.275);box-shadow:0 8px 25px rgba(0,0,0,0.15)}
+.toast.show{transform:translateX(0)}
+.toast.success{background:#16a34a}
+.toast.error{background:#dc2626}
+.toast.info{background:#0d9488}
+
+.format-tag{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:8px;font-size:11px;font-weight:600;border:1px solid}
+.format-tag-b1{background:#f0fdfa;border-color:#99f6e4;color:#0f766e}
+.format-tag-b2{background:#eff6ff;border-color:#bfdbfe;color:#1e40af}
+
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#d6d3d1;border-radius:10px}
+::-webkit-scrollbar-thumb:hover{background:#a8a29e}
+
+@media(max-width:768px){
+  .filter-bar{flex-direction:column;align-items:stretch}
+  .filter-bar select,.filter-bar input{width:100%}
+  .stat-card{padding:18px}
+  .chart-card{padding:16px}
+  .txn-table{font-size:13px}
+  .txn-table thead th,.txn-table tbody td{padding:10px 8px}
+}
+</style>
+</head>
+<body>
+
+<div id="toast" class="toast"></div>
+
+<!-- Upload Section -->
+<section id="uploadSection">
+  <div class="max-w-2xl w-full mx-6 relative z-10">
+    <div class="text-center mb-10">
+      <div class="inline-flex items-center gap-2 bg-pri-50 border border-pri-200 rounded-full px-5 py-2 mb-6">
+        <i class="fa-solid fa-chart-pie text-pri-600 text-sm"></i>
+        <span class="text-pri-700 text-sm font-medium">Bank Statement Analyzer</span>
+      </div>
+      <h1 class="font-display text-4xl md:text-5xl font-800 text-ink-900 leading-tight mb-4">
+        Understand Your<br><span class="text-pri-600">Money Flow</span>
+      </h1>
+      <p class="text-ink-500 text-lg max-w-md mx-auto">Upload your bank statement and get instant insights into spending, categories, and trends.</p>
+    </div>
+
+    <!-- Supported Formats -->
+    <div class="flex flex-wrap justify-center gap-3 mb-6">
+      <span class="format-tag format-tag-b1"><i class="fa-solid fa-building-columns"></i> Bank-1: Tran Date, DR, CR columns</span>
+      <span class="format-tag format-tag-b2"><i class="fa-solid fa-building-columns"></i> Bank-2: Amount, Dr/Cr indicator columns</span>
+    </div>
+
+    <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+      <input type="file" id="fileInput" accept=".csv,.txt" class="hidden">
+      <div class="mb-4">
+        <div class="w-16 h-16 rounded-2xl bg-pri-50 flex items-center justify-center mx-auto mb-4">
+          <i class="fa-solid fa-cloud-arrow-up text-2xl text-pri-600"></i>
+        </div>
+      </div>
+      <p class="text-ink-700 font-semibold text-lg mb-1">Drop your CSV file here</p>
+      <p class="text-ink-400 text-sm mb-4">Auto-detects Bank-1 or Bank-2 format</p>
+      <span class="inline-block bg-srf-100 text-ink-500 text-xs font-medium px-4 py-2 rounded-lg">Supports .csv and .txt files</span>
+    </div>
+  </div>
+</section>
+
+<!-- Dashboard Section -->
+<section id="dashboard">
+  <header class="sticky top-0 z-50 bg-srf-50/80 backdrop-blur-xl border-b border-srf-200">
+    <div class="max-w-7xl mx-auto px-4 md:px-6 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl bg-pri-600 flex items-center justify-center">
+          <i class="fa-solid fa-chart-pie text-white text-sm"></i>
+        </div>
+        <div>
+          <h1 class="font-display font-700 text-ink-900 text-lg leading-tight">Statement Analyzer</h1>
+          <p class="text-ink-400 text-xs" id="statementPeriod">-</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <span id="detectedFormatBadge" class="hidden text-xs font-semibold px-3 py-1.5 rounded-lg"></span>
+        <button onclick="exportCSV()" class="hidden md:flex items-center gap-2 bg-white border border-srf-200 hover:border-pri-300 text-ink-600 font-medium py-2 px-4 rounded-xl transition text-sm">
+          <i class="fa-solid fa-download text-pri-600"></i>Export
+        </button>
+        <button onclick="resetDashboard()" class="flex items-center gap-2 bg-white border border-srf-200 hover:border-exp-300 text-ink-600 font-medium py-2 px-4 rounded-xl transition text-sm">
+          <i class="fa-solid fa-rotate-right text-exp-500"></i>New
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 md:px-6 py-6 space-y-6">
+    <!-- Summary Cards -->
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+      <div class="stat-card income">
+        <p class="text-ink-400 text-xs font-medium uppercase tracking-wider mb-1">Total Income</p>
+        <p class="font-display font-700 text-xl md:text-2xl text-inc-600 counter-val" id="totalIncome">0</p>
+      </div>
+      <div class="stat-card expense">
+        <p class="text-ink-400 text-xs font-medium uppercase tracking-wider mb-1">Total Expenses</p>
+        <p class="font-display font-700 text-xl md:text-2xl text-exp-600 counter-val" id="totalExpense">0</p>
+      </div>
+      <div class="stat-card net">
+        <p class="text-ink-400 text-xs font-medium uppercase tracking-wider mb-1">Net Flow</p>
+        <p class="font-display font-700 text-xl md:text-2xl text-pri-700 counter-val" id="netFlow">0</p>
+      </div>
+      <div class="stat-card avg">
+        <p class="text-ink-400 text-xs font-medium uppercase tracking-wider mb-1">Avg Daily Spend</p>
+        <p class="font-display font-700 text-xl md:text-2xl text-ink-700 counter-val" id="avgDaily">0</p>
+      </div>
+      <div class="stat-card count col-span-2 md:col-span-1">
+        <p class="text-ink-400 text-xs font-medium uppercase tracking-wider mb-1">Transactions</p>
+        <p class="font-display font-700 text-xl md:text-2xl text-ink-700 counter-val" id="txnCount">0</p>
+      </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="filter-bar">
+      <div class="flex items-center gap-2 text-ink-500 text-sm font-medium">
+        <i class="fa-solid fa-filter text-pri-600"></i>Filters
+      </div>
+      <input type="date" id="filterDateFrom" class="text-sm" title="From Date">
+      <span class="text-ink-300 text-sm">to</span>
+      <input type="date" id="filterDateTo" class="text-sm" title="To Date">
+      <select id="filterCategory" class="text-sm min-w-[160px]">
+        <option value="all">All Categories</option>
+      </select>
+      <select id="filterType" class="text-sm">
+        <option value="all">All Types</option>
+        <option value="debit">Debits Only</option>
+        <option value="credit">Credits Only</option>
+      </select>
+      <select id="filterMode" class="text-sm">
+        <option value="all">All Modes</option>
+      </select>
+      <div class="flex-1 min-w-[180px]">
+        <input type="text" id="filterSearch" placeholder="Search descriptions..." class="w-full text-sm">
+      </div>
+      <button onclick="clearFilters()" class="text-sm text-exp-500 hover:text-exp-600 font-medium whitespace-nowrap transition">
+        <i class="fa-solid fa-xmark mr-1"></i>Clear
+      </button>
+    </div>
+
+    <!-- Charts -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div class="chart-card">
+        <h3 class="font-display font-700 text-ink-800 text-base mb-4"><i class="fa-solid fa-chart-column text-pri-600 mr-2"></i>Monthly Income vs Expenses</h3>
+        <div style="height:280px"><canvas id="monthlyChart"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <h3 class="font-display font-700 text-ink-800 text-base mb-4"><i class="fa-solid fa-chart-pie text-exp-500 mr-2"></i>Spending by Category</h3>
+        <div style="height:280px"><canvas id="categoryChart"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <h3 class="font-display font-700 text-ink-800 text-base mb-4"><i class="fa-solid fa-chart-line text-pri-600 mr-2"></i>Balance Trend</h3>
+        <div style="height:280px"><canvas id="balanceChart"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <h3 class="font-display font-700 text-ink-800 text-base mb-4"><i class="fa-solid fa-wallet text-exp-500 mr-2"></i>Payment Mode Distribution</h3>
+        <div style="height:280px"><canvas id="modeChart"></canvas></div>
+      </div>
+    </div>
+
+    <div class="chart-card">
+      <h3 class="font-display font-700 text-ink-800 text-base mb-4"><i class="fa-solid fa-ranking-star text-pri-600 mr-2"></i>Top 10 Merchants / Payees by Spend</h3>
+      <div style="height:300px"><canvas id="merchantChart"></canvas></div>
+    </div>
+
+    <div class="chart-card">
+      <h3 class="font-display font-700 text-ink-800 text-base mb-4"><i class="fa-solid fa-calendar-week text-exp-500 mr-2"></i>Spending by Day of Week</h3>
+      <div style="height:220px"><canvas id="dayChart"></canvas></div>
+    </div>
+
+    <!-- Insights -->
+    <div>
+      <h3 class="font-display font-700 text-ink-800 text-lg mb-4"><i class="fa-solid fa-lightbulb text-yellow-500 mr-2"></i>Smart Insights</h3>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="insightsGrid"></div>
+    </div>
+
+    <!-- Transaction Table -->
+    <div class="chart-card !p-0 overflow-hidden">
+      <div class="px-6 py-4 border-b border-srf-200 flex flex-wrap items-center justify-between gap-3">
+        <h3 class="font-display font-700 text-ink-800 text-base">
+          <i class="fa-solid fa-list text-pri-600 mr-2"></i>Transaction Details
+          <span class="text-ink-400 font-normal text-sm ml-2" id="filteredCount"></span>
+        </h3>
+        <select id="pageSize" class="text-sm border border-srf-200 rounded-lg px-3 py-1.5 bg-srf-50 text-ink-700" onchange="changePageSize()">
+          <option value="10">10 per page</option>
+          <option value="25">25 per page</option>
+          <option value="50">50 per page</option>
+          <option value="all">All</option>
+        </select>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="txn-table">
+          <thead>
+            <tr>
+              <th onclick="sortTable('date')">Date <i class="fa-solid fa-sort text-ink-300 ml-1"></i></th>
+              <th onclick="sortTable('particulars')">Description <i class="fa-solid fa-sort text-ink-300 ml-1"></i></th>
+              <th onclick="sortTable('category')">Category <i class="fa-solid fa-sort text-ink-300 ml-1"></i></th>
+              <th onclick="sortTable('mode')">Mode <i class="fa-solid fa-sort text-ink-300 ml-1"></i></th>
+              <th onclick="sortTable('debit')" class="text-right">Debit <i class="fa-solid fa-sort text-ink-300 ml-1"></i></th>
+              <th onclick="sortTable('credit')" class="text-right">Credit <i class="fa-solid fa-sort text-ink-300 ml-1"></i></th>
+              <th onclick="sortTable('balance')" class="text-right">Balance <i class="fa-solid fa-sort text-ink-300 ml-1"></i></th>
+            </tr>
+          </thead>
+          <tbody id="txnTableBody"></tbody>
+        </table>
+      </div>
+      <div class="px-6 py-4 border-t border-srf-200 flex items-center justify-between" id="pagination"></div>
+    </div>
+    <div class="h-8"></div>
+  </main>
+</section>
+
+<script>
+/* ===== STATE ===== */
+let allTransactions = [];
+let filteredTransactions = [];
+let charts = {};
+let currentPage = 1;
+let sortField = 'date';
+let sortDir = -1;
+let pageSize = 10;
+let detectedFormat = '';
+
+const COLORS = ['#0d9488','#ea580c','#e11d48','#ca8a04','#059669','#0284c7','#c026d3','#65a30d','#dc2626','#0891b2','#d97706','#16a34a','#be185d','#4f46e5','#9333ea','#0f766e','#b91c1c','#15803d'];
+
+/* ===== CATEGORY MAP ===== */
+const CATEGORY_MAP = [
+  {keys:['ZOMATO','SWIGGY','RESTAURANT','CAFE','PIZZA','DOMINOS','MCDONALD','KFC','SUBWAY','STARBUCKS','COFFEE','CHAI POINT','BAKERY','SWEET','ICE CREAM','JUICE','BIRYANI','FOOD COURT','DINE','EAT','MESS','CANTEEN','DABBA','TIFFIN','THALI','FOODZ','FAASOS','BOX8','BURGER','ROLLS','MOMO','CHOLE','PANEER','DOSA','IDLI','VADA','SAMOSA','CHAAT','BEHRAM','LA PINO','MOJO'],cat:'Food & Dining',icon:'fa-utensils',color:'#ea580c'},
+  {keys:['ZERODHA','GROWW','UPSTOX','ANGEL ONE','ICICI DIRECT','HDFC SEC','KOTAK SEC','SHAREKHAN','MOTILAL','5PAISA','SAMCO','STOCK','EQUITY','DERIVATIVE','F&O','OPTION','NSE','BSE'],cat:'Investments & Trading',icon:'fa-chart-line',color:'#0d9488'},
+  {keys:['AMAZON','FLIPKART','MYNTRA','AJIO','NYKAA','MEESHO','SNAPDEAL','SHOPPING','MALL','DECATHLON','NIKE','ADIDAS','PUMA','REEBOK','UNIQLO','LIFESTYLE','PANTALOON','SHOPPERS STOP','RELIANCE DIGITAL','CROMA','VIJAY SALES','TATA CLIQ'],cat:'Shopping',icon:'fa-bag-shopping',color:'#c026d3'},
+  {keys:['ELECTRICITY','WATER','GAS AGENCY','BSNL','JIO','AIRTEL','VODAFONE','IDEA','RECHARGE','PREPAID','POSTPAID','BROADBAND','WIFI','INTERNET','TATA POWER','ADANI ELECTRIC','MAHADISCOM','BESCOM','MESCOM','TNEB','ACT FIBERNET','HATHWAY','RELIANCE JIO'],cat:'Bills & Utilities',icon:'fa-bolt',color:'#ca8a04'},
+  {keys:['UBER','OLA','RAPIDO','METRO','IRCTC','RAILWAY','BUS','PETROL','DIESEL','FUEL','HP PETROL','IOC','BPCL','HPCL','INDIAN OIL','PARKING','TOLL','FASTAG','MAKEMYTRIP','GOIBIBO','CLEARTRIP','YATRA','INDIGO','SPICEJET','AIR INDIA','AIRASIA','VISTARA','AKASA'],cat:'Transport & Travel',icon:'fa-car',color:'#0284c7'},
+  {keys:['NETFLIX','HOTSTAR','DISNEY','PRIME VIDEO','SPOTIFY','YOUTUBE','GAANA','SAVN','BOOKMYSHOW','PVR','INOX','CINEMA','MOVIE','SONY LIV','ZEE5','ALTBALAJI','JIOTV','LIONSPLAY','APPLE MUSIC','DEEZER'],cat:'Entertainment',icon:'fa-film',color:'#e11d48'},
+  {keys:['SUBSCRIPTION','RENEWAL','MEMBERSHIP','PREMIUM','PRO PLAN','ZOOM','GOOGLE ONE','ICLOUD','DROPBOX','SLACK','NOTION','CHATGPT','OPENAI','GITHUB','ADOBE','MICROSOFT 365'],cat:'Subscriptions',icon:'fa-rotate',color:'#9333ea'},
+  {keys:['COURSERA','UDEMY','BYJU','UNACADEMY','VEDANTU','WHITEHAT','SCHOOL','COLLEGE','UNIVERSITY','FEE','TUITION','COACHING','EDUCATION','EDUTECH','LEARN','SKILL'],cat:'Education',icon:'fa-graduation-cap',color:'#059669'},
+  {keys:['PHARMA','MEDICAL','HOSPITAL','CLINIC','DOCTOR','PATHOLOGY','LAB','DIAGNOSTIC','APOLLO','FORTIS','MAX','MEDPLUS','NETMEDS','PHARMACY','1MG','MEDICINE','TABLET','HEALTH','DENTAL','EYE','OPTICAL','LENS','SPECTACLE'],cat:'Health & Medical',icon:'fa-heart-pulse',color:'#dc2626'},
+  {keys:['INSURANCE','LIC','HDFC LIFE','ICICI PRU','SBI LIFE','BAJAJ','STAR HEALTH','CARE HEALTH','ACKO','POLICY','PREMIUM','TATA AIA','MAX LIFE','KOTAK LIFE','INS DEBIT','INS PREM'],cat:'Insurance',icon:'fa-shield-halved',color:'#65a30d'},
+  {keys:['EMI','LOAN','HOME LOAN','CAR LOAN','PERSONAL LOAN','GOLD LOAN','BAJAJ FINSERV','HDBFS','HDFC LTD','LIC HOUSING','MUTHOOT','MANAPPURAM','FINANCE','CREDIT','NBFC'],cat:'EMI & Loans',icon:'fa-building-columns',color:'#0891b2'},
+  {keys:['GROCERY','GROFERS','BIGBASKET','BLINKIT','DUNZO','JIO MART','SPENCER','MORE','NATURES BASKET','FRESH','VEGETABLE','FRUIT','KIRANA','DMART','BIG BAZAAR','RELIANCE RETAIL','SUPERSHOPPE','MART','BHANDAR'],cat:'Groceries',icon:'fa-cart-shopping',color:'#16a34a'},
+  {keys:['RENT','HOUSE RENT','FLAT RENT','PG','HOSTEL','ACCOMMODATION','LEASE','SOCIETY','MAINTENANCE'],cat:'Rent & Housing',icon:'fa-house',color:'#d97706'},
+  {keys:['SALARY','WAGES','PAYROLL','INCOME','STIPEND','PENSION','DIVIDEND','INTEREST CREDIT','REFUND','CASHBACK','REVERSAL','TD INT','FD INT','INT PAYOUT','INTEREST ON','TERM DEPOSIT','RD INT'],cat:'Income & Refunds',icon:'fa-arrow-trend-up',color:'#0f766e'},
+  {keys:['GOOGLE','APPLE','PLAY STORE','APP STORE','IN APP','MICROSOFT','AMAZON WEB','AWS','DIGITAL OCEAN','HEROKU','VERCEL','NETLIFY','DOMAIN','HOSTING','SERVER'],cat:'Tech & Digital',icon:'fa-microchip',color:'#4f46e5'},
+];
+const DEFAULT_CAT = {cat:'Personal Transfer',icon:'fa-arrow-right-arrow-left',color:'#78716c'};
+
+/* ===== UTILITIES ===== */
+function fmt(n){return new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',minimumFractionDigits:0,maximumFractionDigits:0}).format(n)}
+function fmtFull(n){return new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',minimumFractionDigits:2,maximumFractionDigits:2}).format(n)}
+function fmtDate(d){if(!d)return'-';return d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}
+function getMonthKey(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')}
+function getMonthLabel(k){const[y,m]=k.split('-');return new Date(y,parseInt(m)-1).toLocaleDateString('en-IN',{month:'short',year:'2-digit'})}
+function parseNum(s){if(!s)return 0;s=String(s).replace(/[, ]/g,'').trim();const n=parseFloat(s);return isNaN(n)?0:Math.abs(n)}
+function parseDate(s){if(!s)return null;s=s.trim();const dateOnly=s.split(/\s+/)[0];const p=dateOnly.split(/[-\/]/);if(p.length===3){const dd=parseInt(p[0]),mm=parseInt(p[1])-1,yy=parseInt(p[2]);if(yy<100)yy+=2000;const d=new Date(yy,mm,dd);if(!isNaN(d.getTime()))return d}return null}
+
+/* ===== CSV LINE SPLITTER (handles quoted fields) ===== */
+function splitCSVLine(line){
+  const result=[];
+  let current='';
+  let inQuotes=false;
+  for(let i=0;i<line.length;i++){
+    const c=line[i];
+    if(c==='"'){inQuotes=!inQuotes}
+    else if(c===','&&!inQuotes){result.push(current.trim());current=''}
+    else{current+=c}
+  }
+  result.push(current.trim());
+  return result;
+}
+
+/* ===== CATEGORY / MODE / MERCHANT DETECTION ===== */
+function detectCategory(p){
+  const u=p.toUpperCase();
+  for(const cm of CATEGORY_MAP){for(const k of cm.keys){if(u.includes(k))return{cat:cm.cat,icon:cm.icon,color:cm.color}}}
+  return DEFAULT_CAT;
+}
+function detectMode(p){
+  const u=p.toUpperCase();
+  if(u.includes('UPI/'))return 'UPI';
+  if(u.includes('NEFT'))return 'NEFT';
+  if(u.includes('IMPS'))return 'IMPS';
+  if(u.includes('RTGS'))return 'RTGS';
+  if(u.includes('ATM'))return 'ATM';
+  if(/CHQ|CHEQUE/i.test(p))return 'Cheque';
+  if(/DD\/|DEMAND DRAFT/i.test(p))return 'DD';
+  if(/CASH WDL|CASH DEPOSIT|CASH/i.test(p))return 'Cash';
+  if(/INTERNAL|TRF/i.test(p))return 'Transfer';
+  return 'Other';
+}
+function extractMerchant(p){
+  const u=p.toUpperCase();
+  // UPI: UPI/P2A/xxx/NAME/BANK/UPI/
+  const upiM=p.match(/UPI\/P2[AM]\/[^\/]*\/([^\/]+)\//i);
+  if(upiM)return upiM[1].trim();
+  // NEFT with slashes: NEFT/REF/NAME/
+  const neftSlash=p.match(/(?:NEFT|IMPS|RTGS)\/[^\/]*\/([^\/-]+)/i);
+  if(neftSlash)return neftSlash[1].trim();
+  // NEFT/IMPS plain: "NEFT SALARY APR 2026 ABC CORP LTD"
+  const plain=p.match(/^(?:NEFT|IMPS|RTGS)\s+(?:INW|OUT)?\s*\S*\s*(.+)$/i);
+  if(plain)return plain[1].trim().substring(0,40);
+  // TD Int / FD Int
+  if(/^(TD Int|FD Int)/i.test(p))return 'Term Deposit Interest';
+  // Ins Debit
+  if(/^Ins Debit/i.test(p))return 'Insurance Premium Deduction';
+  // Fallback
+  const parts=p.split('/').filter(x=>x.trim().length>2);
+  if(parts.length>1)return parts[1].trim().substring(0,40);
+  return p.substring(0,40).trim();
+}
+
+/* ===== MAIN CSV PARSER — Auto-detects Bank-1 or Bank-2 ===== */
+function parseCSV(text){
+  const lines=text.split(/\r?\n/).filter(l=>l.trim());
+  const transactions=[];
+  let format=null;
+  let minDate=null,maxDate=null;
+
+  for(const line of lines){
+    const parts=splitCSVLine(line);
+    if(parts.length<2)continue;
+    const joined=parts.join(' ').toUpperCase();
+
+    // Skip metadata lines
+    if(joined.includes('STATEMENT OF ACCOUNT'))continue;
+
+    // Format detection from header
+    if(!format){
+      if(joined.includes('TRANSACTION DATE')&&(joined.includes('DR / CR')||joined.includes('DR/CR'))){
+        format='bank2';continue;
+      }
+      if(joined.includes('TRAN DATE')&&joined.includes('PARTICULARS')){
+        format='bank1';continue;
+      }
+      continue; // skip lines until header found
+    }
+
+    let date,particulars,dr,cr,balance;
+
+    if(format==='bank1'){
+      // BANK-1: Tran Date,CHQNO,PARTICULARS,DR,CR,BAL,SOL
+      if(parts.length<6)continue;
+      date=parseDate(parts[0]);
+      particulars=parts[2]||'';
+      dr=parseNum(parts[3]);
+      cr=parseNum(parts[4]);
+      balance=parseNum(parts[5]);
+    } else {
+      // BANK-2: "Sl. No.","Transaction Date","Value Date","Description","Chq /Ref No.","Amount","Dr / Cr","Balance","Dr / Cr"
+      if(parts.length<8)continue;
+      // Transaction Date may include time: "10-06-2026 03:08:29"
+      const dateRaw=(parts[1]||'').trim();
+      date=parseDate(dateRaw);
+      particulars=parts[3]||'';
+      const amount=parseNum(parts[5]);
+      const drCr=(parts[6]||'').trim().toUpperCase();
+      const balVal=parseNum(parts[7]);
+      const balDrCr=(parts[8]||'CR').trim().toUpperCase();
+
+      dr=(drCr==='DR')?amount:0;
+      cr=(drCr==='CR')?amount:0;
+      balance=(balDrCr==='DR')?-balVal:balVal;
+    }
+
+    if(!date)continue;
+    if(dr===0&&cr===0)continue; // skip zero-amount lines
+
+    const category=detectCategory(particulars);
+    const mode=detectMode(particulars);
+    const merchant=extractMerchant(particulars);
+
+    transactions.push({
+      date, dateStr:parts[format==='bank1'?0:1]||'', particulars:particulars.trim(),
+      debit:dr, credit:cr, balance,
+      category:category.cat, catIcon:category.icon, catColor:category.color,
+      mode, merchant, monthKey:getMonthKey(date), dayOfWeek:date.getDay()
+    });
+
+    if(!minDate||date<minDate)minDate=date;
+    if(!maxDate||date>maxDate)maxDate=date;
+  }
+
+  transactions.sort((a,b)=>a.date-b.date);
+  return{transactions,minDate,maxDate,format};
+}
+
+/* ===== TOAST ===== */
+function showToast(msg,type='info'){
+  const t=document.getElementById('toast');t.textContent=msg;t.className='toast '+type+' show';
+  setTimeout(()=>t.classList.remove('show'),3500);
+}
+
+/* ===== FILE HANDLING ===== */
+const dropZone=document.getElementById('dropZone');
+const fileInput=document.getElementById('fileInput');
+dropZone.addEventListener('dragover',e=>{e.preventDefault();dropZone.classList.add('drag-over')});
+dropZone.addEventListener('dragleave',()=>dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop',e=>{e.preventDefault();dropZone.classList.remove('drag-over');const f=e.dataTransfer.files[0];if(f)readFile(f)});
+fileInput.addEventListener('change',e=>{const f=e.target.files[0];if(f)readFile(f)});
+
+function readFile(file){
+  const r=new FileReader();
+  r.onload=e=>processData(e.target.result);
+  r.onerror=()=>showToast('Failed to read file','error');
+  r.readAsText(file);
+}
+function parsePastedData(){
+  const t=document.getElementById('pasteArea').value.trim();
+  if(!t){showToast('Please paste your statement data','error');return}
+  processData(t);
+}
+function loadDemoData(type){
+  processData(type==='bank2'?getBank2Demo():getBank1Demo());
+}
+
+/* ===== MAIN PROCESS ===== */
+function processData(text){
+  const{transactions,minDate,maxDate,format}=parseCSV(text);
+  if(transactions.length===0){showToast('No valid transactions found. Check the format.','error');return}
+  allTransactions=transactions;
+  filteredTransactions=[...allTransactions];
+  detectedFormat=format||'unknown';
+
+  document.getElementById('filterDateFrom').value=minDate.toISOString().split('T')[0];
+  document.getElementById('filterDateTo').value=maxDate.toISOString().split('T')[0];
+  document.getElementById('statementPeriod').textContent=fmtDate(minDate)+' — '+fmtDate(maxDate)+' ('+transactions.length+' transactions)';
+
+  // Format badge
+  const badge=document.getElementById('detectedFormatBadge');
+  badge.classList.remove('hidden');
+  if(format==='bank2'){badge.textContent='Bank-2 Format';badge.className='text-xs font-semibold px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 border border-blue-200'}
+  else{badge.textContent='Bank-1 Format';badge.className='text-xs font-semibold px-3 py-1.5 rounded-lg bg-pri-50 text-pri-700 border border-pri-200'}
+
+  populateFilterDropdowns();
+  document.getElementById('uploadSection').style.display='none';
+  document.getElementById('dashboard').style.display='block';
+  window.scrollTo(0,0);
+  updateDashboard();
+  showToast('Loaded '+transactions.length+' transactions ('+(format==='bank2'?'Bank-2':'Bank-1')+' format) detected','success');
+}
+
+/* ===== FILTER DROPDOWNS ===== */
+function populateFilterDropdowns(){
+  const cats=[...new Set(allTransactions.map(t=>t.category))].sort();
+  const cs=document.getElementById('filterCategory');
+  cs.innerHTML='<option value="all">All Categories</option>';
+  cats.forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=c;cs.appendChild(o)});
+  const modes=[...new Set(allTransactions.map(t=>t.mode))].sort();
+  const ms=document.getElementById('filterMode');
+  ms.innerHTML='<option value="all">All Modes</option>';
+  modes.forEach(m=>{const o=document.createElement('option');o.value=m;o.textContent=m;ms.appendChild(o)});
+}
+
+/* ===== FILTERS ===== */
+function applyFilters(){
+  const df=document.getElementById('filterDateFrom').value;
+  const dt=document.getElementById('filterDateTo').value;
+  const cat=document.getElementById('filterCategory').value;
+  const type=document.getElementById('filterType').value;
+  const mode=document.getElementById('filterMode').value;
+  const search=document.getElementById('filterSearch').value.toLowerCase().trim();
+  filteredTransactions=allTransactions.filter(t=>{
+    if(df&&t.date<new Date(df))return false;
+    if(dt&&t.date>new Date(dt+'T23:59:59'))return false;
+    if(cat!=='all'&&t.category!==cat)return false;
+    if(type==='debit'&&t.debit===0)return false;
+    if(type==='credit'&&t.credit===0)return false;
+    if(mode!=='all'&&t.mode!==mode)return false;
+    if(search&&!t.particulars.toLowerCase().includes(search)&&!t.merchant.toLowerCase().includes(search)&&!t.category.toLowerCase().includes(search))return false;
+    return true;
+  });
+  currentPage=1;updateDashboard();
+}
+function clearFilters(){
+  document.getElementById('filterDateFrom').value='';
+  document.getElementById('filterDateTo').value='';
+  document.getElementById('filterCategory').value='all';
+  document.getElementById('filterType').value='all';
+  document.getElementById('filterMode').value='all';
+  document.getElementById('filterSearch').value='';
+  filteredTransactions=[...allTransactions];currentPage=1;updateDashboard();
+}
+['filterDateFrom','filterDateTo','filterCategory','filterType','filterMode','filterSearch'].forEach(id=>{
+  document.getElementById(id).addEventListener(id==='filterSearch'?'input':'change',applyFilters);
+});
+
+/* ===== UPDATE DASHBOARD ===== */
+function updateDashboard(){updateSummaryCards();updateCharts();updateInsights();renderTable()}
+
+/* ===== SUMMARY CARDS ===== */
+function updateSummaryCards(){
+  const tI=filteredTransactions.reduce((s,t)=>s+t.credit,0);
+  const tO=filteredTransactions.reduce((s,t)=>s+t.debit,0);
+  const net=tI-tO;
+  const days=new Set(filteredTransactions.map(t=>t.date.toDateString())).size||1;
+  animateCounter('totalIncome',tI);animateCounter('totalExpense',tO);
+  animateCounter('netFlow',net);animateCounter('avgDaily',tO/days);
+  document.getElementById('txnCount').textContent=filteredTransactions.length;
+}
+function animateCounter(id,target){
+  const el=document.getElementById(id);const start=parseFloat(el.dataset.val||'0');el.dataset.val=target;
+  const dur=800,st=performance.now();
+  function step(now){const p=Math.min((now-st)/dur,1);const e=1-Math.pow(1-p,3);el.textContent=fmt(start+(target-start)*e);if(p<1)requestAnimationFrame(step)}
+  requestAnimationFrame(step);
+}
+
+/* ===== CHARTS ===== */
+function updateCharts(){Object.values(charts).forEach(c=>{if(c)c.destroy()});charts={};renderMonthlyChart();renderCategoryChart();renderBalanceChart();renderModeChart();renderMerchantChart();renderDayChart()}
+
+function renderMonthlyChart(){
+  const md={};filteredTransactions.forEach(t=>{if(!md[t.monthKey])md[t.monthKey]={income:0,expense:0};md[t.monthKey].income+=t.credit;md[t.monthKey].expense+=t.debit});
+  const k=Object.keys(md).sort();
+  charts.monthly=new Chart(document.getElementById('monthlyChart'),{type:'bar',data:{labels:k.map(getMonthLabel),datasets:[
+    {label:'Income',data:k.map(x=>md[x].income),backgroundColor:'rgba(22,163,74,0.8)',borderRadius:6,barPercentage:0.7,categoryPercentage:0.7},
+    {label:'Expenses',data:k.map(x=>md[x].expense),backgroundColor:'rgba(234,88,12,0.8)',borderRadius:6,barPercentage:0.7,categoryPercentage:0.7}
+  ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top',labels:{usePointStyle:true,pointStyle:'circle',padding:16,font:{family:'Outfit',size:12}}},tooltip:{callbacks:{label:c=>c.dataset.label+': '+fmt(c.parsed.y)},bodyFont:{family:'Space Grotesk'},titleFont:{family:'Outfit'}}},scales:{x:{grid:{display:false},ticks:{font:{family:'Outfit',size:11}}},y:{grid:{color:'rgba(0,0,0,0.04)'},ticks:{font:{family:'Space Grotesk',size:11},callback:v=>fmt(v)}}}}});
+}
+
+function renderCategoryChart(){
+  const cd={};filteredTransactions.filter(t=>t.debit>0).forEach(t=>{cd[t.category]=(cd[t.category]||0)+t.debit});
+  const s=Object.entries(cd).sort((a,b)=>b[1]-a[1]);
+  const bg=s.map(e=>{const f=CATEGORY_MAP.find(cm=>cm.cat===e[0]);return f?f.color:DEFAULT_CAT.color});
+  charts.category=new Chart(document.getElementById('categoryChart'),{type:'doughnut',data:{labels:s.map(e=>e[0]),datasets:[{data:s.map(e=>e[1]),backgroundColor:bg,borderWidth:2,borderColor:'#fff',hoverOffset:8}]},options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:{position:'right',labels:{usePointStyle:true,pointStyle:'circle',padding:10,font:{family:'Outfit',size:11},generateLabels:ch=>{const d=ch.data;const tot=d.datasets[0].data.reduce((a,b)=>a+b,0);return d.labels.map((l,i)=>({text:l+' ('+((d.datasets[0].data[i]/tot)*100).toFixed(1)+'%)',fillStyle:d.datasets[0].backgroundColor[i],strokeStyle:'#fff',lineWidth:2,pointStyle:'circle',hidden:false,index:i}))}}},tooltip:{callbacks:{label:c=>c.label+': '+fmt(c.parsed)},bodyFont:{family:'Space Grotesk'},titleFont:{family:'Outfit'}}}}});
+}
+
+function renderBalanceChart(){
+  const bd={};filteredTransactions.forEach(t=>{bd[t.date.toISOString().split('T')[0]]=t.balance});
+  const k=Object.keys(bd).sort();const labels=k.map(x=>{const d=new Date(x);return d.toLocaleDateString('en-IN',{day:'2-digit',month:'short'})});
+  const ctx=document.getElementById('balanceChart').getContext('2d');const g=ctx.createLinearGradient(0,0,0,280);g.addColorStop(0,'rgba(13,148,136,0.2)');g.addColorStop(1,'rgba(13,148,136,0.0)');
+  charts.balance=new Chart(ctx,{type:'line',data:{labels,datasets:[{label:'Balance',data:k.map(x=>bd[x]),fill:true,backgroundColor:g,borderColor:'#0d9488',borderWidth:2.5,pointRadius:k.length>30?0:3,pointHoverRadius:5,pointBackgroundColor:'#0d9488',tension:0.3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>'Balance: '+fmtFull(c.parsed.y)},bodyFont:{family:'Space Grotesk'},titleFont:{family:'Outfit'}}},scales:{x:{grid:{display:false},ticks:{font:{family:'Outfit',size:10},maxTicksLimit:10}},y:{grid:{color:'rgba(0,0,0,0.04)'},ticks:{font:{family:'Space Grotesk',size:11},callback:v=>fmt(v)}}}}});
+}
+
+function renderModeChart(){
+  const md={};filteredTransactions.filter(t=>t.debit>0).forEach(t=>{md[t.mode]=(md[t.mode]||0)+t.debit});
+  const s=Object.entries(md).sort((a,b)=>b[1]-a[1]);
+  const mc={'UPI':'#0d9488','NEFT':'#ca8a04','IMPS':'#e11d48','RTGS':'#0284c7','ATM':'#65a30d','Cheque':'#78716c','Cash':'#d97706','Transfer':'#0891b2','Other':'#a8a29e'};
+  charts.mode=new Chart(document.getElementById('modeChart'),{type:'pie',data:{labels:s.map(e=>e[0]),datasets:[{data:s.map(e=>e[1]),backgroundColor:s.map(e=>mc[e[0]]||'#a8a29e'),borderWidth:2,borderColor:'#fff',hoverOffset:8}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{usePointStyle:true,pointStyle:'circle',padding:12,font:{family:'Outfit',size:12}}},tooltip:{callbacks:{label:c=>c.label+': '+fmt(c.parsed)},bodyFont:{family:'Space Grotesk'},titleFont:{family:'Outfit'}}}}});
+}
+
+function renderMerchantChart(){
+  const md={};filteredTransactions.filter(t=>t.debit>0&&t.category!=='Income & Refunds').forEach(t=>{const n=t.merchant.substring(0,35);md[n]=(md[n]||0)+t.debit});
+  const s=Object.entries(md).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  charts.merchant=new Chart(document.getElementById('merchantChart'),{type:'bar',data:{labels:s.map(e=>e[0]),datasets:[{label:'Total Spent',data:s.map(e=>e[1]),backgroundColor:s.map((_,i)=>COLORS[i%COLORS.length]),borderRadius:6,barPercentage:0.7}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>'Total: '+fmt(c.parsed.x)},bodyFont:{family:'Space Grotesk'},titleFont:{family:'Outfit'}}},scales:{x:{grid:{color:'rgba(0,0,0,0.04)'},ticks:{font:{family:'Space Grotesk',size:11},callback:v=>fmt(v)}},y:{grid:{display:false},ticks:{font:{family:'Outfit',size:11}}}}}});
+}
+
+function renderDayChart(){
+  const dd=[0,0,0,0,0,0,0],dc=[0,0,0,0,0,0,0];
+  filteredTransactions.filter(t=>t.debit>0).forEach(t=>{dd[t.dayOfWeek]+=t.debit;dc[t.dayOfWeek]++});
+  const avg=dd.map((v,i)=>dc[i]?v/dc[i]:0);
+  charts.day=new Chart(document.getElementById('dayChart'),{type:'bar',data:{labels:['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'],datasets:[
+    {label:'Total Spend',data:dd,backgroundColor:'rgba(234,88,12,0.7)',borderRadius:6,barPercentage:0.6,categoryPercentage:0.7,yAxisID:'y'},
+    {label:'Avg per Txn',data:avg,backgroundColor:'rgba(13,148,136,0.7)',borderRadius:6,barPercentage:0.6,categoryPercentage:0.7,yAxisID:'y1'}
+  ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top',labels:{usePointStyle:true,pointStyle:'circle',padding:16,font:{family:'Outfit',size:11}}},tooltip:{callbacks:{label:c=>c.dataset.label+': '+fmt(c.parsed.y)},bodyFont:{family:'Space Grotesk'},titleFont:{family:'Outfit'}}},scales:{x:{grid:{display:false},ticks:{font:{family:'Outfit',size:11}}},y:{position:'left',grid:{color:'rgba(0,0,0,0.04)'},ticks:{font:{family:'Space Grotesk',size:10},callback:v=>fmt(v)}},y1:{position:'right',grid:{display:false},ticks:{font:{family:'Space Grotesk',size:10},callback:v=>fmt(v)}}}}});
+}
+
+/* ===== INSIGHTS ===== */
+function updateInsights(){
+  const grid=document.getElementById('insightsGrid');grid.innerHTML='';
+  generateInsights().forEach(ins=>{
+    const c=document.createElement('div');c.className='insight-card';
+    c.innerHTML=`<div class="insight-icon" style="background:${ins.bg};color:${ins.color}"><i class="fa-solid ${ins.icon}"></i></div><div><p class="font-semibold text-ink-800 text-sm mb-0.5">${ins.title}</p><p class="text-ink-500 text-xs leading-relaxed">${ins.desc}</p></div>`;
+    grid.appendChild(c);
+  });
+}
+function generateInsights(){
+  const ins=[];const debits=filteredTransactions.filter(t=>t.debit>0);const credits=filteredTransactions.filter(t=>t.credit>0);
+  const tI=credits.reduce((s,t)=>s+t.credit,0);const tO=debits.reduce((s,t)=>s+t.debit,0);
+  if(filteredTransactions.length===0)return[{title:'No Data',desc:'Apply different filters to see insights.',icon:'fa-circle-info',bg:'#f5f5f4',color:'#78716c'}];
+  const ct={};debits.forEach(t=>{ct[t.category]=(ct[t.category]||0)+t.debit});
+  const topC=Object.entries(ct).sort((a,b)=>b[1]-a[1])[0];
+  if(topC)ins.push({title:'Top Spending Category',desc:`You spent ${fmt(topC[1])} on ${topC[0]} — ${((topC[1]/tO)*100).toFixed(1)}% of all expenses.`,icon:'fa-trophy',bg:'#fef3c7',color:'#92400e'});
+  if(tI>0){const sr=((tI-tO)/tI*100);ins.push({title:'Savings Rate: '+sr.toFixed(1)+'%',desc:sr>20?'Great job! You are saving more than 20% of your income.':'Your savings rate is below the recommended 20%. Review discretionary spending.',icon:sr>20?'fa-piggy-bank':'fa-triangle-exclamation',bg:sr>20?'#f0fdf4':'#fef2f2',color:sr>20?'#166534':'#991b1b'})}
+  const big=debits.reduce((m,t)=>t.debit>m.debit?t:m,{debit:0});
+  if(big.debit>0)ins.push({title:'Biggest Single Expense',desc:`${fmt(big.debit)} to "${big.merchant}" on ${fmtDate(big.date)}. Category: ${big.category}.`,icon:'fa-receipt',bg:'#fce7f3',color:'#9d174d'});
+  const me={};debits.forEach(t=>{me[t.monthKey]=(me[t.monthKey]||0)+t.debit});const mk=Object.keys(me).sort();
+  if(mk.length>=2){const l=me[mk[mk.length-1]],p=me[mk[mk.length-2]],ch=((l-p)/p*100);ins.push({title:'Monthly Spending Trend',desc:`Spending ${ch>0?'increased':'decreased'} by ${Math.abs(ch).toFixed(1)}% (${fmt(p)} → ${fmt(l)}).`,icon:ch>0?'fa-arrow-trend-up':'fa-arrow-trend-down',bg:ch>0?'#fef2f2':'#f0fdf4',color:ch>0?'#991b1b':'#166534'})}
+  const hv=debits.filter(t=>t.debit>=10000);if(hv.length>0){const ht=hv.reduce((s,t)=>s+t.debit,0);ins.push({title:'High-Value Transactions',desc:`${hv.length} transaction(s) of ₹10,000+ totaling ${fmt(ht)} — ${((ht/tO)*100).toFixed(1)}% of all spending.`,icon:'fa-indian-rupee-sign',bg:'#f0fdfa',color:'#0f766e'})}
+  const we=debits.filter(t=>t.dayOfWeek===0||t.dayOfWeek===6).reduce((s,t)=>s+t.debit,0);const wd=tO-we;
+  if(we>0&&wd>0)ins.push({title:'Weekend vs Weekday',desc:`Weekends: ${fmt(we)} (${((we/tO)*100).toFixed(0)}%) | Weekdays: ${fmt(wd)} (${((wd/tO)*100).toFixed(0)}%).`,icon:'fa-calendar-days',bg:'#eff6ff',color:'#1e40af'});
+  const ce=Object.entries(ct).sort((a,b)=>b[1]-a[1]);
+  if(ce.length>=3){const p=ce.slice(0,3).reduce((s,e)=>s+e[1],0)/tO*100;ins.push({title:'Spending Concentration',desc:`Top 3 categories (${ce.slice(0,3).map(e=>e[0]).join(', ')}) = ${p.toFixed(1)}% of total.`,icon:'fa-chart-pie',bg:'#faf5ff',color:'#7c3aed'})}
+  const mc={};debits.forEach(t=>{if(t.category!=='Income & Refunds'){mc[t.merchant]=(mc[t.merchant]||0)+1}});const fm=Object.entries(mc).sort((a,b)=>b[1]-a[1])[0];
+  if(fm&&fm[1]>1)ins.push({title:'Most Frequent Merchant',desc:`"${fm[0]}" with ${fm[1]} transactions. Consider consolidating or reducing.`,icon:'fa-repeat',bg:'#fefce8',color:'#854d0e'});
+  ins.push({title:'Average Transaction Size',desc:`${fmt(debits.length>0?tO/debits.length:0)} per debit across ${debits.length} debits.`,icon:'fa-calculator',bg:'#f5f5f4',color:'#44403c'});
+  return ins.slice(0,9);
+}
+
+/* ===== TABLE ===== */
+function renderTable(){
+  const body=document.getElementById('txnTableBody');
+  document.getElementById('filteredCount').textContent='(Showing '+filteredTransactions.length+' transactions)';
+  const sorted=[...filteredTransactions].sort((a,b)=>{
+    let va,vb;switch(sortField){case 'date':va=a.date;vb=b.date;break;case 'particulars':va=a.particulars.toLowerCase();vb=b.particulars.toLowerCase();break;case 'category':va=a.category.toLowerCase();vb=b.category.toLowerCase();break;case 'mode':va=a.mode.toLowerCase();vb=b.mode.toLowerCase();break;case 'debit':va=a.debit;vb=b.debit;break;case 'credit':va=a.credit;vb=b.credit;break;case 'balance':va=a.balance;vb=b.balance;break;default:va=a.date;vb=b.date}
+    if(va<vb)return -1*sortDir;if(va>vb)return 1*sortDir;return 0;
+  });
+  const ps=pageSize==='all'?sorted.length:parseInt(pageSize);const tp=Math.ceil(sorted.length/ps)||1;if(currentPage>tp)currentPage=tp;
+  const start=(currentPage-1)*ps;const page=sorted.slice(start,start+ps);
+  body.innerHTML='';
+  if(!page.length){body.innerHTML='<tr><td colspan="7" class="text-center py-12 text-ink-400"><i class="fa-solid fa-inbox text-3xl mb-3 block"></i>No transactions match your filters</td></tr>'}
+  else{page.forEach(t=>{
+    const mc=t.mode==='UPI'?'badge-upi':t.mode==='NEFT'?'badge-neft':t.mode==='IMPS'?'badge-imps':'badge-other';
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td class="whitespace-nowrap font-medium text-ink-700">${fmtDate(t.date)}</td><td class="max-w-[250px]"><div class="truncate text-ink-700" title="${t.particulars}">${t.particulars}</div><div class="text-ink-400 text-xs mt-0.5 truncate">${t.merchant}</div></td><td><span class="cat-badge" style="background:${t.catColor}15;color:${t.catColor}"><i class="fa-solid ${t.catIcon} mr-1 text-[10px]"></i>${t.category}</span></td><td><span class="badge ${mc}">${t.mode}</span></td><td class="amount-debit text-right">${t.debit>0?fmtFull(t.debit):'-'}</td><td class="amount-credit text-right">${t.credit>0?'+'+fmtFull(t.credit):'-'}</td><td class="text-right font-display font-medium text-ink-600">${t.balance!==0?fmtFull(t.balance):'-'}</td>`;
+    body.appendChild(tr);
+  })}
+  renderPagination(tp,sorted.length);
+}
+function renderPagination(tp,total){
+  const el=document.getElementById('pagination');
+  if(pageSize==='all'){el.innerHTML='<span class="text-ink-400 text-sm">Showing all '+total+' transactions</span>';return}
+  const ps=parseInt(pageSize);const start=(currentPage-1)*ps+1;const end=Math.min(currentPage*ps,total);
+  let h=`<span class="text-ink-400 text-sm">Showing ${start}–${end} of ${total}</span><div class="flex items-center gap-1">`;
+  h+=`<button class="page-btn" onclick="goPage(${currentPage-1})" ${currentPage===1?'disabled':''}><i class="fa-solid fa-chevron-left text-xs"></i></button>`;
+  const pages=[];if(tp<=7){for(let i=1;i<=tp;i++)pages.push(i)}else{pages.push(1);if(currentPage>3)pages.push('...');for(let i=Math.max(2,currentPage-1);i<=Math.min(tp-1,currentPage+1);i++)pages.push(i);if(currentPage<tp-2)pages.push('...');pages.push(tp)}
+  pages.forEach(p=>{if(p==='...')h+=`<span class="text-ink-400 text-sm px-1">...</span>`;else h+=`<button class="page-btn ${p===currentPage?'active':''}" onclick="goPage(${p})">${p}</button>`});
+  h+=`<button class="page-btn" onclick="goPage(${currentPage+1})" ${currentPage===tp?'disabled':''}><i class="fa-solid fa-chevron-right text-xs"></i></button></div>`;el.innerHTML=h;
+}
+function goPage(p){const ps=pageSize==='all'?allTransactions.length:parseInt(pageSize);const tp=Math.ceil(filteredTransactions.length/ps)||1;if(p<1||p>tp)return;currentPage=p;renderTable();document.querySelector('.txn-table').scrollIntoView({behavior:'smooth',block:'nearest'})}
+function changePageSize(){pageSize=document.getElementById('pageSize').value;currentPage=1;renderTable()}
+function sortTable(f){if(sortField===f)sortDir*=-1;else{sortField=f;sortDir=-1}renderTable()}
+
+/* ===== EXPORT ===== */
+function exportCSV(){
+  if(!filteredTransactions.length){showToast('No data to export','error');return}
+  let csv='Date,Description,Category,Mode,Debit,Credit,Balance\n';
+  filteredTransactions.forEach(t=>{csv+=`${t.dateStr},"${t.particulars}","${t.category}","${t.mode}",${t.debit||''},${t.credit||''},${t.balance||''}\n`});
+  const b=new Blob([csv],{type:'text/csv'});const u=URL.createObjectURL(b);const a=document.createElement('a');a.href=u;a.download='bank_statement_analysis.csv';a.click();URL.revokeObjectURL(u);showToast('CSV exported successfully','success');
+}
+
+/* ===== RESET ===== */
+function resetDashboard(){
+  allTransactions=[];filteredTransactions=[];Object.values(charts).forEach(c=>{if(c)c.destroy()});charts={};
+  document.getElementById('dashboard').style.display='none';document.getElementById('uploadSection').style.display='flex';
+  document.getElementById('pasteArea').value='';document.getElementById('fileInput').value='';
+  document.getElementById('detectedFormatBadge').classList.add('hidden');
+}
+</script>
+</body>
+</html>
